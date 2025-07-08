@@ -99,6 +99,138 @@ The client is now a modern Python application (`process_event.py`) that:
    python app/process_event.py --config /path/to/custom.conf
    ```
 
+### Docker Setup
+
+For containerized deployment, Q4D provides Docker support with pre-built images.
+
+#### Using Docker (Standalone)
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/davidgibbons/queue4download:latest
+
+# Run with environment variables
+docker run -d \
+  --name q4d-client \
+  --restart unless-stopped \
+  -e Q4D_BUS_HOST=mqtt.your-broker.com \
+  -e Q4D_BUS_PORT=1883 \
+  -e Q4D_USER=your_mqtt_username \
+  -e Q4D_PW=your_mqtt_password \
+  -e Q4D_HOST=your.seedbox.com \
+  -e Q4D_THREADS=4 \
+  -e Q4D_SEGMENTS=8 \
+  -e Q4D_PATH=/downloads \
+  -v /local/downloads:/downloads \
+  -v /local/credentials:/app/credentials:ro \
+  -v /local/type_mapping.json:/app/type_mapping.json:ro \
+  ghcr.io/davidgibbons/queue4download:latest
+```
+
+#### Using Docker Compose
+
+Create a `docker-compose.yml` file:
+
+```yaml
+version: '3.8'
+
+services:
+  q4d-client:
+    image: ghcr.io/davidgibbons/queue4download:latest
+    container_name: q4d-client
+    restart: unless-stopped
+    
+    # Environment variables for Q4D configuration
+    environment:
+      - Q4D_BUS_HOST=mqtt.your-broker.com
+      - Q4D_BUS_PORT=1883
+      - Q4D_USER=your_mqtt_username
+      - Q4D_PW=your_mqtt_password
+      - Q4D_LABELLING=true
+      - Q4D_CREDS=/app/credentials
+      - Q4D_HOST=your.seedbox.com
+      - Q4D_THREADS=4
+      - Q4D_SEGMENTS=8
+      - Q4D_PATH=/downloads
+      
+    # Volume mounts
+    volumes:
+      # Mount local downloads directory
+      - ./downloads:/downloads
+      # Mount SFTP credentials
+      - ./credentials:/app/credentials:ro
+      # Mount type mapping (optional override)
+      - ./type_mapping.json:/app/type_mapping.json:ro
+      
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import paho.mqtt.client as mqtt; print('OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Optional: Local MQTT broker for testing
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: q4d-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    profiles:
+      - testing
+```
+
+Then run:
+
+```bash
+# Start the service
+docker-compose up -d
+
+# View logs
+docker-compose logs -f q4d-client
+
+# Stop the service
+docker-compose down
+```
+
+#### Environment Variables for Docker
+
+All configuration options can be set via environment variables by prefixing with `Q4D_`:
+
+| Environment Variable | Description | Example |
+|---------------------|-------------|---------|
+| `Q4D_BUS_HOST` | MQTT broker hostname | `mqtt.broker.com` |
+| `Q4D_BUS_PORT` | MQTT broker port | `1883` |
+| `Q4D_USER` | MQTT username | `your_username` |
+| `Q4D_PW` | MQTT password | `your_password` |
+| `Q4D_LABELLING` | Enable torrent labelling | `true` |
+| `Q4D_CREDS` | SFTP credentials file path | `/app/credentials` |
+| `Q4D_HOST` | Seedbox hostname | `seedbox.com` |
+| `Q4D_THREADS` | Concurrent transfer threads | `4` |
+| `Q4D_SEGMENTS` | LFTP segments per transfer | `8` |
+| `Q4D_PATH` | Local download directory | `/downloads` |
+
+#### Building Your Own Image
+
+If you want to build the Docker image locally:
+
+```bash
+# Build the image
+docker build -t q4d-client .
+
+# Run your local build
+docker run -d --name q4d-client q4d-client
+```
+
 ### Server Setup
 
 Server scripts remain unchanged from the original implementation. See the legacy documentation for bash script configuration on your seedbox.

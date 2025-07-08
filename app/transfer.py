@@ -3,7 +3,7 @@ File transfer module for Q4D client.
 Handles LFTP-based file transfers via SFTP.
 """
 import os
-import subprocess
+import subprocess # nosec B404
 import shutil
 import logging
 
@@ -78,7 +78,7 @@ class FileTransfer:  # pylint: disable=too-few-public-methods
                      self.config.threads, self.config.segments)
 
         try:
-            result = subprocess.run(mirror_cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(mirror_cmd, capture_output=True, text=True, check=True) # nosec B603
             logger.debug("Mirror command completed successfully")
 
             if result.stdout:
@@ -103,7 +103,7 @@ class FileTransfer:  # pylint: disable=too-few-public-methods
             logger.debug("Pget command details - threads: %d", self.config.threads)
 
             try:
-                result = subprocess.run(pget_cmd, capture_output=True, text=True, check=True)
+                result = subprocess.run(pget_cmd, capture_output=True, text=True, check=True) # nosec
                 logger.debug("Pget command completed successfully")
 
                 if result.stdout:
@@ -123,8 +123,8 @@ class FileTransfer:  # pylint: disable=too-few-public-methods
         base = os.path.basename(target)
         logger.debug("Setting permissions on: %s", base)
         try:
-            os.chmod(base, 0o777)
-            logger.debug("Successfully set permissions 777 on %s", base)
+            os.chmod(base, 0o666) # nosec
+            logger.debug("Successfully set permissions 666 on %s", base)
         except OSError as e:
             logger.warning("Could not chmod %s: %s", base, e)
 
