@@ -1,0 +1,35 @@
+[flake8]
+max-line-length = 127
+max-complexity = 10
+exclude = 
+    .git,
+    __pycache__,
+    .pytest_cache,
+    .coverage,
+    *.egg-info,
+    build,
+    dist
+
+# Error codes to ignore
+ignore = 
+    # Line too long (handled by max-line-length)
+    E501,
+    # Line break before binary operator (conflicts with black)
+    W503,
+    # Line break after binary operator 
+    W504
+
+# Error codes to always check
+select = 
+    # Python syntax errors or undefined names
+    E9,F63,F7,F82,
+    # Import-related errors
+    F4,
+    # Unused imports/variables
+    F401,F841,
+    # Redefined functions/variables
+    F811,F831
+
+per-file-ignores =
+    # Tests can have longer lines and unused imports
+    tests/*:E501,F401,F811 

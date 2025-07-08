@@ -1,0 +1,9 @@
+{
+    "A": "/Media/Music",
+    "B": "/Media/B-Movies", 
+    "J": "/Media/Jeopardy",
+    "T": "/Media/TV",
+    "M": "/Media/Movies",
+    "V": "/Media/Video",
+    "ERR": "/Media/Other"
+} 
