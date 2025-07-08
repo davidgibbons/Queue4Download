@@ -1,21 +1,22 @@
 # Queue4Download
 
-Set of Scripts written by Chmura to automate push notification of completed torrent payloads for integration into a home media library while updating the torrent client on a remote server.
+![Tests](https://github.com/davidgibbons/Queue4Download/workflows/Tests/badge.svg)
+![PR Tests](https://github.com/davidgibbons/Queue4Download/workflows/PR%20Tests/badge.svg)
+![Python Support](https://img.shields.io/badge/python-3.8%2B-blue)
 
+Modern Python implementation of Q4D - automated push notification system for completed torrent payloads with integration into home media libraries and remote torrent client labelling.
 
-# Why Q4D?
+## Why Q4D?
 
 Seedboxes have limited storage, if you want to retain your payloads in a media library application like Plex, Jellyfin, Kodi or Emby you need to copy from your seedbox to home. This is currently not well integrated into torrent clients, and requires automation that 'syncs' your media libraries, packages like rsync, syncthing or resilio - all of which poll your seedbox (say every hour or half hour), and copy anything new home - relying on directory structure and linking to organize your media.
 
 Queue4Download addresses all of these issues - the scripts integrate directly with the torrent client, and can use labelling to capture progress. By using a lightweight message bus like Mosquitto, the process becomes a push not a pull, no more polling. The torrent finishes, the event is queued and captured by your home server, which spawns an LFTP job from home to transfer (very fast) from where the torrent lives to where you specify in your media library. Destinations are mapped by you, based on such criteria as tracker, title, path or label. Queue4Download is written to handle torrents, unlike generic utilities. This means that usually it is minutes, not hours that your media appears in your media server. All automated.
 
+## Architecture
 
-## Scripts
+The system consists of server-side scripts (seedbox) and a Python client application (home server):
 
-There are a total of four scripts, and four config files, two on the server (most likely seedbox) and Q4Dconfig.sh (both client and server configuration must be changed to work) 
-
-
-### Server
+### Server (Seedbox)
 
 Queue4Download.sh - Torrent client hook Script. Throws an event upon completion of the torrent, event contains the payload name/path (where LFTP will find the payload), the payload hash (for label updates once the transfer is complete), and a simple category code (tells home where to put the payload, ie /Media/Movies)
 
@@ -25,45 +26,152 @@ Types.config - Flat file declarations for type code assignment (space separated 
 
 Q4Dconfig.sh - MQTT co-ords, torrent client, and labelling definitions (needed on both client and server)
 
+### Client (Home Server)
 
-### Client
+The client is now a modern Python application (`process_event.py`) that:
 
-ProcessEvent.sh - Receive Queue Event Script. Catches the event, queues an LFTP job to transfer the payload, runs as a daemon. Blocks waiting for a Queue event, forks LFTP workers, which block on a lock (hence Queued4Download.sh)
+- Connects to your MQTT broker and listens for download completion events
+- Automatically triggers LFTP transfers based on configured type mappings
+- Handles concurrent downloads with configurable thread limits
+- Provides comprehensive logging and error handling
+- Supports graceful shutdown and signal handling
 
-LFTPtransfer.sh - Transfer Engine. Using LFTP, get the payload from the server to a specific directory (using the category code) into your home library, and acknowledge the transfer back to the server. 
+## Installation & Setup
 
-Q4Dclient.sh - Definitions for LFTP to access your server, and type code to directory mappings
+### Prerequisites
 
-### Other
+- Python 3.8 or higher
+- LFTP for file transfers
+- Access to an MQTT broker (Mosquitto recommended)
+- Seedbox/server with bash/ssh access for server scripts
 
-Q4Ddefines.sh - Paths and other clutter that is largely static
+### Client Setup
 
-mosq_bin.tar.z - Largely static compile of Mosquitto (Ubuntu 20+, Debian 11)
+1. **Install Python dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
+2. **Configure the application:**
+   
+   Edit `app/q4d.conf` with your settings:
+   ```ini
+   [DEFAULT]
+   BUS_HOST = your.mqtt.broker.com
+   BUS_PORT = 1883
+   USER = your_mqtt_username
+   PW = your_mqtt_password
+   LABELLING = true
+   CREDS = your_sftp_credentials
+   HOST = your.seedbox.com
+   THREADS = 4
+   SEGMENTS = 8
+   PATH = /path/to/your/downloads
+   ```
 
-## Prerequisites
+   Or use environment variables (prefix with `Q4D_`):
+   ```bash
+   export Q4D_BUS_HOST=your.mqtt.broker.com
+   export Q4D_BUS_PORT=1883
+   # ... etc
+   ```
 
-The ability to make simple edits to shell scripts, a seedbox/server that has bash/ssh access. 
+3. **Configure type mappings:**
+   
+   Edit `app/type_mapping.json` to map category codes to local directories:
+   ```json
+   {
+     "MOV": "/media/movies",
+     "TV": "/media/tv",
+     "MUSIC": "/media/music"
+   }
+   ```
 
-Server scripts use Bash 4.0 features. Client is compatible with BSD, Linux, and other Unix variants.
+4. **Run the client:**
+   ```bash
+   # Run in foreground with debug logging
+   python app/process_event.py --debug
+   
+   # Run as daemon (production)
+   python app/process_event.py --daemon
+   
+   # Custom configuration file
+   python app/process_event.py --config /path/to/custom.conf
+   ```
 
-Uses Mosquitto MQTT simple event broker: mosquitto daemon is the broker, mosquitto_pub publishes an event, mosquitto_sub catches an event (publish and subscribe)
+### Server Setup
 
-Labelling, not part of the torrent standard, is accomplished by specific client extensions, such as rtcontrol from pyroscope, and deluge-console from deluge.
+Server scripts remain unchanged from the original implementation. See the legacy documentation for bash script configuration on your seedbox.
 
-Uses LFTP for quick transfers (throttle set on Q4Dclient.sh)
+## Configuration Options
 
+### Command Line Arguments
 
-## Notes
+- `--config`: Path to configuration file (default: `app/q4d.conf`)
+- `--log-level`: Logging level (DEBUG, INFO, WARNING, ERROR)
+- `--daemon`: Run as background daemon
+- `--debug`: Enable debug logging (equivalent to `--log-level DEBUG`)
 
-Scripts have been structured to make customization straight forward, adding in categories, changing torrent client, destination paths, or even the broker should be easy for anyone familiar with Bash scripting.
+### Configuration File Options
 
-Uses some of Bash 4.4, been tested on Ubuntu and FreeBSD. This has NOT been tested for any form of Windows or Windows emulation, or OSX. Mosquitto runs on all of them, it is Bash Daemon handling that would be an issue.
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `BUS_HOST` | MQTT broker hostname | Required |
+| `BUS_PORT` | MQTT broker port | 1883 |
+| `USER` | MQTT username | Required |
+| `PW` | MQTT password | Required |
+| `LABELLING` | Enable torrent labelling | true |
+| `CREDS` | SFTP credentials file | Required |
+| `HOST` | Seedbox hostname | Required |
+| `THREADS` | Concurrent transfer threads | 4 |
+| `SEGMENTS` | LFTP segments per transfer | 8 |
+| `PATH` | Local download directory | Required |
 
-Further notes, install instructions:
+## Development
 
-https://www.reddit.com/r/sbtech/comments/1ams0hn/q4d_updated/
+### Running Tests
 
+```bash
+# Install test dependencies
+pip install -r requirements.txt
 
-Older: https://www.reddit.com/r/Chmuranet/comments/f3lghf/queue4download_scripts_to_handle_torrent_complete/
-https://www.reddit.com/r/sbtech/comments/nih988/queue4download_scripts_to_handle_torrent_complete/
+# Run all tests
+python -m pytest tests/ -v
+
+# Run tests with coverage
+python -m pytest tests/ --cov=app --cov-report=term-missing
+
+# Run specific test file
+python -m pytest tests/test_config.py -v
+```
+
+### Code Quality
+
+The project uses GitHub Actions for continuous integration:
+
+- **Full test matrix** - Tests across Python 3.8-3.12 on Ubuntu, Windows, and macOS
+- **Pull request checks** - Fast feedback with linting and test coverage
+- **Security scanning** - Dependency vulnerability checks with Safety and Bandit
+- **Code quality** - Linting with flake8 and optional type checking with mypy
+
+### Test Coverage
+
+The test suite includes comprehensive coverage:
+
+- **Config module** - Configuration loading, validation, and environment variable handling
+- **MQTT handler** - MQTT client operations, connection handling, and message processing  
+- **Process event** - Main application logic, argument parsing, and signal handling
+- **Transfer** - File transfer operations and LFTP command execution
+- **Type mapping** - JSON configuration loading and error handling
+
+## Legacy Documentation
+
+For historical reference and server-side bash script setup:
+
+- [Q4D Updated](https://www.reddit.com/r/sbtech/comments/1ams0hn/q4d_updated/)
+- [Original Queue4Download](https://www.reddit.com/r/Chmuranet/comments/f3lghf/queue4download_scripts_to_handle_torrent_complete/)
+- [SBTech Discussion](https://www.reddit.com/r/sbtech/comments/nih988/queue4download_scripts_to_handle_torrent_complete/)
+
+## License
+
+This project maintains compatibility with the original Q4D implementation while modernizing the client-side components for better maintainability and reliability.
